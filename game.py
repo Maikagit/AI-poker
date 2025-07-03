@@ -1,10 +1,12 @@
 import pygame
+from collections import deque
 from cards import Deck
 from players import Player, AIPlayer
 from hands import HAND_RANKS
 
 class PokerGame:
-    def __init__(self, human_name='Vous', nb_ai=2, templates='card_templates'):
+
+    def __init__(self, human_name='Vous', nb_ai=2, templates='card_templates', width=1024, height=768):
         self.deck = Deck(templates)
         self.players = [Player(human_name, is_human=True)]
         self.players += [AIPlayer(f"IA{i+1}") for i in range(nb_ai)]
@@ -14,11 +16,14 @@ class PokerGame:
         self.current_bet = 0
         self.pot = 0
         self.dealer = 0
+        self.history = deque()
+        self.width = width
+        self.height = height
 
         pygame.init()
         self.font = pygame.font.SysFont(None, 24)
         self.card_back = pygame.image.load(f"{templates}/dos.png")
-        self.screen = pygame.display.set_mode((800, 600))
+        self.screen = pygame.display.set_mode((width, height))
         pygame.display.set_caption('Texas Holdem')
 
     def rotate_dealer(self):
@@ -62,6 +67,15 @@ class PokerGame:
                     player.chips -= bet_amount
                     self.pot += bet_amount
                     last_raiser = idx if action in ['bet','raise'] else last_raiser
+
+                if not player.is_human:
+                    self.draw()
+                    msg = f"{player.name} {action}"
+                    text = self.font.render(msg, True, (255,255,0))
+                    self.screen.blit(text, (20, 20))
+                    pygame.display.flip()
+                    pygame.time.wait(2000)
+
                 # check if betting is over
                 if last_raiser is None:
                     if idx == (start_index - 1) % len(self.players):
@@ -80,8 +94,10 @@ class PokerGame:
         while waiting:
             self.draw()
             prompt = f"Votre tour: (c)all {to_call}, (r)aise, (f)old"
-            text = self.font.render(prompt, True, (255,255,255))
-            self.screen.blit(text, (10, 550))
+
+            text = self.font.render(prompt, True, (255,0,0))
+            self.screen.blit(text, (10, self.height - 40))
+
             pygame.display.flip()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -102,21 +118,32 @@ class PokerGame:
     def showdown(self):
         active = [p for p in self.players if not p.folded]
         scores = [(p, p.hand_strength(self.community)) for p in active]
-        winner = max(scores, key=lambda s: s[1])
-        winner[0].chips += self.pot
-        return winner[0]
+
+        winner_player, rank = max(scores, key=lambda s: s[1])
+        winner_player.chips += self.pot
+        desc = HAND_RANKS[rank[0]]
+        self.history.append(f"{winner_player.name}: {desc}")
+        return winner_player, desc
 
     def draw(self):
         self.screen.fill((0,128,0))
         # community cards
-        x = 150
-        y = 250
+
+        x = self.width//2 - 160
+        y = self.height//2 - 100
+
         for card in self.community:
             img = pygame.image.load(card.image_path)
             self.screen.blit(img, (x,y))
             x += 80
         # players
-        positions = [ (50,450), (600,450), (325,50) ]
+
+        positions = [
+            (50, self.height - 200),
+            (self.width - 200, self.height - 200),
+            (self.width // 2 - 100, 50),
+        ]
+
         for i, player in enumerate(self.players):
             px, py = positions[i]
             if player.is_human or not player.folded:
@@ -127,7 +154,13 @@ class PokerGame:
             text = self.font.render(label, True, (255,255,255))
             self.screen.blit(text, (px, py-20))
         pot_text = self.font.render(f"Pot: {self.pot}", True, (255,255,0))
-        self.screen.blit(pot_text, (350, 200))
+
+        self.screen.blit(pot_text, (self.width//2 - 40, self.height//2 - 150))
+
+        # history of last hands
+        for i, entry in enumerate(list(self.history)[-5:][::-1]):
+            hist_text = self.font.render(entry, True, (255,255,255))
+            self.screen.blit(hist_text, (self.width - 250, 100 + i*20))
 
     def play_hand(self):
         self.deal_new_round()
@@ -144,9 +177,11 @@ class PokerGame:
             return
         self.community += self.deck.deal(1)
         self.betting_round((self.dealer+1)%len(self.players))
-        winner = self.showdown()
+
+        winner, desc = self.showdown()
         self.draw()
-        text = self.font.render(f"{winner.name} gagne le pot!", True, (255,255,0))
+        text = self.font.render(f"{winner.name} gagne le pot ({desc})!", True, (255,255,0))
+
         self.screen.blit(text, (300, 300))
         pygame.display.flip()
         pygame.time.wait(3000)

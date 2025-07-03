@@ -17,5 +17,8 @@ python3 game.py
 ```
 
 Les touches **c**, **r** et **f** permettent respectivement de suivre
+
+Une zone d'historique en haut à droite rappelle les dernières mains gagnantes.
+=======
 (call), de relancer (raise) ou de se coucher (fold) lorsque c'est votre
  tour.
